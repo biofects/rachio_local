@@ -82,7 +82,8 @@
           },
           "runs": {
             "name": "Runs",
-            "description": "List of daily run configurations. Each run specifies when to water (start_time OR sun_event) and which valves to use. Example: [{\"start_time\": \"06:00:00\", \"valves\": [{\"entity_id\": \"switch.front_yard_valve\", \"duration\": 600}]}, {\"sun_event\": \"AFTER_SET\", \"sun_offset_minutes\": 30, \"valves\": [{\"entity_id\": \"switch.back_yard_valve\", \"duration\": 300}]}]"
+            "description": "List of daily run configurations. Each run specifies when to water (start_time OR sun_event) and which valves to use.",
+            "example": "start_time=06:00:00, valves=[switch.front_yard_valve, duration=600]"
           }
         }
       }
