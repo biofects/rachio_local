@@ -1,7 +1,7 @@
 """Constants for the Rachio Local integration."""
 
 DOMAIN = "rachio_local"
-VERSION = "1.0.0"
+VERSION = "2.5.1"
 
 # Configuration
 CONF_API_KEY = "api_key"
