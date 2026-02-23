@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## v2.5.1 (2026-02-23) - Bug Fix Release
+
+### 🐛 Bug Fixes
+- **services.yaml:** Fixed duplicate 'fields' key in `update_program` service definition that was causing YAML validation errors (PR #26 by [@truffshuff](https://github.com/truffshuff)) - Fixes issue #25
+
+### 🙏 Contributors
+- [@truffshuff](https://github.com/truffshuff) - Bug fix for duplicate fields key
+
+---
+
 ## v2.5.0 (2025-10-23) - Major Smart Hose Timer Enhancement Release
 
 ### 🎉 Major Contributions by [@truffshuff](https://github.com/truffshuff)
