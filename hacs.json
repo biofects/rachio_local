@@ -1,9 +1,5 @@
 {
-  "name": "Rachio Local Control",
-  "content_in_root": false,
-  "render_readme": true,
-  "domains": ["switch", "sensor", "select"],
-  "homeassistant": "2025.6.1",
-  "country": "US",
-  "iot_class": "cloud_polling"
+    "name": "Rachio Local Control",
+    "render_readme": true,
+    "homeassistant": "2025.6.1"
 }
