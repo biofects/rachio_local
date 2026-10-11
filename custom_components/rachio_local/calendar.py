@@ -6,12 +6,55 @@ Shows past and future program/valve runs, with skip annotations.
 from datetime import timedelta
 import logging
 import json
+import re
 from homeassistant.components.calendar import CalendarEntity, CalendarEvent
 from homeassistant.util import dt as dt_util
 from homeassistant.helpers.storage import Store
 from .const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
+
+# Summary prefix added to skipped runs, e.g. "Rain Skip: Back Lawn - Back Sprinklers"
+_SKIP_PREFIX_RE = re.compile(r"^(?:\w+ Skip|Skipped): ")
+
+
+def _skip_reason(skip):
+    """Return a short reason ("Rain", "Manual", ...) for a valve run's skip dict, or None."""
+    if not skip:
+        return None
+    for key in skip:
+        if key.endswith("OverrideTrigger"):
+            reason = key[: -len("OverrideTrigger")]
+            return reason[:1].upper() + reason[1:]
+    return "Unknown"
+
+
+def _skip_summary(summary, reason):
+    """Prefix a summary so skipped runs stand out on the calendar."""
+    return f"{reason} Skip: {summary}" if reason and reason != "Unknown" else f"Skipped: {summary}"
+
+
+def _skip_details(skip, reason):
+    """Describe why a run was skipped, including rain amounts when available."""
+    detail = f"Skipped ({reason})"
+    rain = skip.get("rainOverrideTrigger") or {}
+    amounts = []
+    if rain.get("predictedPrecipMm") is not None:
+        amounts.append(f"predicted {rain['predictedPrecipMm']} mm")
+    if rain.get("observedPrecipMm") is not None:
+        amounts.append(f"observed {rain['observedPrecipMm']} mm")
+    if amounts:
+        detail += f": {', '.join(amounts)}"
+    return detail
+
+
+def _is_skipped(event):
+    return bool(_SKIP_PREFIX_RE.match(event.summary or ""))
+
+
+def _event_key(event):
+    """Dedupe key that ignores the skip prefix, so a run marked skipped replaces its unmarked copy."""
+    return (event.start, _SKIP_PREFIX_RE.sub("", event.summary or ""))
 
 async def async_setup_entry(hass, config_entry, async_add_entities):
     devices = hass.data[DOMAIN][config_entry.entry_id]["devices"]
@@ -46,10 +89,10 @@ class RachioSmartHoseTimerCalendar(CalendarEntity):
 
     @property
     def event(self):
-        """Return the next upcoming event."""
+        """Return the next upcoming event that will actually water."""
         now = dt_util.utcnow()
         for event in self._events:
-            if event.start >= now:
+            if event.start >= now and not _is_skipped(event):
                 return event
         return None
 
@@ -74,9 +117,9 @@ class RachioSmartHoseTimerCalendar(CalendarEntity):
         future_new_events = [e for e in new_events if e.start >= now]
         
         # Merge persisted past events with new past events (avoid duplicates by start time and summary)
-        all_past_events = { (e.start, e.summary): e for e in self._persisted_events }
+        all_past_events = { _event_key(e): e for e in self._persisted_events }
         for e in past_new_events:
-            all_past_events[(e.start, e.summary)] = e
+            all_past_events[_event_key(e)] = e
         
         # Only keep past events from the last 180 days
         cutoff = now - timedelta(days=180)
@@ -166,9 +209,22 @@ class RachioSmartHoseTimerCalendar(CalendarEntity):
                                 desc.append(f"Program ID: {program_id}")
                             if valve_names:
                                 desc.append(f"Valves: {', '.join(valve_names)}")
-                            
+
+                            # The program is skipped only if every valve run is skipped
+                            summary = program_name
+                            skipped_runs = [v for v in valve_runs if v.get("skip")]
+                            if skipped_runs:
+                                skip = skipped_runs[0]["skip"]
+                                reason = _skip_reason(skip)
+                                if len(skipped_runs) == len(valve_runs):
+                                    summary = _skip_summary(program_name, reason)
+                                    desc.insert(0, _skip_details(skip, reason))
+                                else:
+                                    skipped_names = [valve_name_map.get(v.get("valveId"), v.get("valveId")) for v in skipped_runs]
+                                    desc.append(f"Partially skipped ({reason}): {', '.join(skipped_names)}")
+
                             events.append(CalendarEvent(
-                                summary=program_name,
+                                summary=summary,
                                 start=program_start,
                                 end=program_end,
                                 description=" | ".join(desc)
@@ -188,8 +244,13 @@ class RachioSmartHoseTimerCalendar(CalendarEntity):
                                 desc.append(f"Valve ID: {valve_id}")
                             if valve.get("flowDetected"):
                                 desc.append("Flow Detected")
+                            summary = f"{program_name} - {valve_name}"
+                            if valve.get("skip"):
+                                reason = _skip_reason(valve["skip"])
+                                summary = _skip_summary(summary, reason)
+                                desc.insert(0, _skip_details(valve["skip"], reason))
                             events.append(CalendarEvent(
-                                summary=f"{program_name} - {valve_name}",
+                                summary=summary,
                                 start=v_start,
                                 end=v_end,
                                 description=" | ".join(desc)
